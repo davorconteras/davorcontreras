@@ -1,0 +1,247 @@
+import sys
+import os
+import re
+
+campus = ["zona core", "campus uno", "campus matriz", "sector outsourcing"]
+
+def nombre_archivo_seguro(nombre):
+    return nombre.lower().replace(" ", "_").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+
+def mostrar_menu():
+    print("\n¿Qué desea hacer?")
+    print("1. Ver dispositivos")
+    print("2. Ver campus")
+    print("3. Añadir dispositivo")
+    print("4. Añadir campus")
+    print("5. Borrar dispositivo")
+    print("6. Borrar campus")
+    print("0. Salir")
+
+def elegir_campus():
+    print("Seleccione un campus:")
+    for idx, nombre in enumerate(campus, 1):
+        print(f"{idx}. {nombre}")
+    try:
+        opcion = int(input("Elija una opción: "))
+        if 1 <= opcion <= len(campus):
+            return campus[opcion - 1]
+        else:
+            print("Opción fuera de rango.")
+            return None
+    except Exception:
+        print("Entrada inválida o no disponible.")
+        return None
+
+def ver_dispositivos():
+    campus_seleccionado = elegir_campus()
+    if campus_seleccionado:
+        try:
+            filename = nombre_archivo_seguro(campus_seleccionado) + ".txt"
+            with open(filename, "r") as file:
+                print(f"\nDispositivos en {campus_seleccionado}:")
+                print(file.read())
+        except FileNotFoundError:
+            print("No hay dispositivos registrados para este campus.")
+        except OSError as e:
+            print(f"Error al leer el archivo: {e}")
+
+def ver_campus():
+    print("\nCampus registrados:")
+    for c in campus:
+        print(f"- {c}")
+
+def validar_ip(ip):
+    patron = r"^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." \
+             r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." \
+             r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." \
+             r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+    return re.match(patron, ip) is not None
+
+def validar_vlan(vlan):
+    return vlan.isdigit() and 1 <= int(vlan) <= 4094
+
+def añadir_dispositivo():
+    campus_seleccionado = elegir_campus()
+    if not campus_seleccionado:
+        return
+
+    servicios = []
+    try:
+        print("\nTipo de dispositivo:\n1. Router\n2. Switch\n3. Switch multicapa")
+        tipo = input("Seleccione tipo: ").strip()
+
+        nombre = input("Nombre del dispositivo: ").strip()
+        print("\nJerarquía:\n1. Núcleo\n2. Distribución\n3. Acceso")
+        jerarquia_opcion = input("Seleccione jerarquía: ").strip()
+    except Exception:
+        print("Entrada inválida o no disponible.")
+        return
+
+    jerarquias = {"1": "Núcleo", "2": "Distribución", "3": "Acceso"}
+    jerarquia = jerarquias.get(jerarquia_opcion, "No especificada")
+
+    if tipo == "1":
+        servicios.append("Enrutamiento")
+        tipo_disp = "Router"
+    elif tipo == "2":
+        tipo_disp = "Switch"
+        servicios += seleccionar_servicios(["Datos", "VLAN", "Trunking"])
+    elif tipo == "3":
+        tipo_disp = "Switch Multicapa"
+        servicios += seleccionar_servicios(["Datos", "VLAN", "Trunking", "Enrutamiento"])
+    else:
+        print("Tipo inválido.")
+        return
+
+    # Validar IP
+    while True:
+        ip = input("Dirección IP del dispositivo: ").strip()
+        if validar_ip(ip):
+            break
+        else:
+            print("IP inválida. Intente de nuevo.")
+
+    # Validar VLAN
+    while True:
+        vlan = input("Número de VLAN (1-4094): ").strip()
+        if validar_vlan(vlan):
+            break
+        else:
+            print("VLAN inválida. Debe estar entre 1 y 4094.")
+
+    try:
+        filename = nombre_archivo_seguro(campus_seleccionado) + ".txt"
+        with open(filename, "a") as file:
+            file.write("\n---------------------------------\n")
+            file.write(f"{tipo_disp}: {nombre}\n")
+            file.write(f"Jerarquía: {jerarquia}\n")
+            file.write(f"Servicios: {', '.join(servicios)}\n")
+            file.write(f"IP: {ip}\n")
+            file.write(f"VLAN: {vlan}\n")
+            file.write("---------------------------------\n")
+        print("Dispositivo agregado con éxito.")
+    except OSError as e:
+        print(f"Error al escribir en el archivo: {e}")
+
+def seleccionar_servicios(opciones):
+    servicios = []
+    while True:
+        print("\nServicios disponibles:")
+        for idx, servicio in enumerate(opciones, 1):
+            print(f"{idx}. {servicio}")
+        print(f"{len(opciones) + 1}. Terminar selección")
+        try:
+            seleccion = int(input("Elija un servicio: "))
+            if 1 <= seleccion <= len(opciones):
+                servicios.append(opciones[seleccion - 1])
+            elif seleccion == len(opciones) + 1:
+                break
+            else:
+                print("Opción inválida.")
+        except Exception:
+            print("Entrada inválida o no disponible.")
+            break
+    return servicios
+
+def añadir_campus():
+    try:
+        nuevo = input("Nombre del nuevo campus: ").strip()
+        if nuevo and nuevo not in campus:
+            campus.append(nuevo)
+            print("Campus agregado.")
+        else:
+            print("Campus ya existe o nombre inválido.")
+    except Exception:
+        print("No se pudo completar la operación.")
+
+def borrar_campus():
+    try:
+        nombre = input("Nombre del campus a eliminar: ").strip()
+        if nombre in campus:
+            campus.remove(nombre)
+            filename = nombre_archivo_seguro(nombre) + ".txt"
+            try:
+                os.remove(filename)
+                print("Campus y archivo eliminados.")
+            except FileNotFoundError:
+                print("Campus eliminado (no tenía archivo).")
+            except OSError as e:
+                print(f"Error al eliminar archivo: {e}")
+        else:
+            print("Campus no encontrado.")
+    except Exception:
+        print("No se pudo completar la operación.")
+
+def borrar_dispositivo():
+    campus_seleccionado = elegir_campus()
+    if not campus_seleccionado:
+        return
+
+    try:
+        filename = nombre_archivo_seguro(campus_seleccionado) + ".txt"
+        with open(filename, "r") as file:
+            lineas = file.readlines()
+
+        dispositivos = []
+        temp = []
+        for linea in lineas:
+            if linea.startswith("---------------------------------"):
+                if temp:
+                    dispositivos.append(temp)
+                    temp = []
+            temp.append(linea)
+        if temp:
+            dispositivos.append(temp)
+
+        if not dispositivos:
+            print("No hay dispositivos para eliminar.")
+            return
+
+        print("\nDispositivos disponibles:")
+        for idx, disp in enumerate(dispositivos):
+            nombre_linea = next((l for l in disp if l.strip().startswith("Router:") or l.strip().startswith("Switch") or l.strip().startswith("Switch Multicapa")), "")
+            print(f"{idx + 1}. {nombre_linea.strip()}")
+
+        seleccion = int(input("Seleccione el número del dispositivo a eliminar: "))
+        if 1 <= seleccion <= len(dispositivos):
+            del dispositivos[seleccion - 1]
+            with open(filename, "w") as file:
+                for d in dispositivos:
+                    file.writelines(d)
+            print("Dispositivo eliminado correctamente.")
+        else:
+            print("Selección fuera de rango.")
+
+    except Exception as e:
+        print(f"Error al eliminar el dispositivo: {e}")
+
+def main():
+    print("Bienvenido al sistema de gestión de red.\n")
+    while True:
+        mostrar_menu()
+        try:
+            opcion = input("Seleccione una opción: ").strip()
+        except Exception:
+            print("Error de entrada. Finalizando el programa.")
+            break
+
+        if opcion == "1":
+            ver_dispositivos()
+        elif opcion == "2":
+            ver_campus()
+        elif opcion == "3":
+            añadir_dispositivo()
+        elif opcion == "4":
+            añadir_campus()
+        elif opcion == "5":
+            borrar_dispositivo()
+        elif opcion == "6":
+            borrar_campus()
+        elif opcion == "0":
+            print("Saliendo del programa.")
+            break
+        else:
+            print("Opción inválida.")
+
+if __name__ == "__main__":
+    main()
