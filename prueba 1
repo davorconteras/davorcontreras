@@ -15,6 +15,7 @@ def mostrar_menu():
     print("4. Añadir campus")
     print("5. Borrar dispositivo")
     print("6. Borrar campus")
+    print("7. Editar dispositivo")
     print("0. Salir")
 
 def elegir_campus():
@@ -31,6 +32,16 @@ def elegir_campus():
     except Exception:
         print("Entrada inválida o no disponible.")
         return None
+
+def validar_ip(ip):
+    patron = re.compile(r'^(\d{1,3}\.){3}\d{1,3}$')
+    if patron.match(ip):
+        partes = ip.split(".")
+        return all(0 <= int(p) <= 255 for p in partes)
+    return False
+
+def validar_vlan(vlan):
+    return vlan.isdigit() and 1 <= int(vlan) <= 4094
 
 def ver_dispositivos():
     campus_seleccionado = elegir_campus()
@@ -50,15 +61,25 @@ def ver_campus():
     for c in campus:
         print(f"- {c}")
 
-def validar_ip(ip):
-    patron = r"^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." \
-             r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." \
-             r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\." \
-             r"(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
-    return re.match(patron, ip) is not None
-
-def validar_vlan(vlan):
-    return vlan.isdigit() and 1 <= int(vlan) <= 4094
+def seleccionar_servicios(opciones):
+    servicios = []
+    while True:
+        print("\nServicios disponibles:")
+        for idx, servicio in enumerate(opciones, 1):
+            print(f"{idx}. {servicio}")
+        print(f"{len(opciones) + 1}. Terminar selección")
+        try:
+            seleccion = int(input("Elija un servicio: "))
+            if 1 <= seleccion <= len(opciones):
+                servicios.append(opciones[seleccion - 1])
+            elif seleccion == len(opciones) + 1:
+                break
+            else:
+                print("Opción inválida.")
+        except Exception:
+            print("Entrada inválida o no disponible.")
+            break
+    return servicios
 
 def añadir_dispositivo():
     campus_seleccionado = elegir_campus()
@@ -93,21 +114,19 @@ def añadir_dispositivo():
         print("Tipo inválido.")
         return
 
-    # Validar IP
     while True:
-        ip = input("Dirección IP del dispositivo: ").strip()
+        ip = input("Dirección IP: ").strip()
         if validar_ip(ip):
             break
         else:
-            print("IP inválida. Intente de nuevo.")
+            print("IP inválida. Intente nuevamente.")
 
-    # Validar VLAN
     while True:
-        vlan = input("Número de VLAN (1-4094): ").strip()
+        vlan = input("VLAN: ").strip()
         if validar_vlan(vlan):
             break
         else:
-            print("VLAN inválida. Debe estar entre 1 y 4094.")
+            print("VLAN inválida. Intente nuevamente.")
 
     try:
         filename = nombre_archivo_seguro(campus_seleccionado) + ".txt"
@@ -115,33 +134,13 @@ def añadir_dispositivo():
             file.write("\n---------------------------------\n")
             file.write(f"{tipo_disp}: {nombre}\n")
             file.write(f"Jerarquía: {jerarquia}\n")
-            file.write(f"Servicios: {', '.join(servicios)}\n")
             file.write(f"IP: {ip}\n")
             file.write(f"VLAN: {vlan}\n")
+            file.write(f"Servicios: {', '.join(servicios)}\n")
             file.write("---------------------------------\n")
         print("Dispositivo agregado con éxito.")
     except OSError as e:
         print(f"Error al escribir en el archivo: {e}")
-
-def seleccionar_servicios(opciones):
-    servicios = []
-    while True:
-        print("\nServicios disponibles:")
-        for idx, servicio in enumerate(opciones, 1):
-            print(f"{idx}. {servicio}")
-        print(f"{len(opciones) + 1}. Terminar selección")
-        try:
-            seleccion = int(input("Elija un servicio: "))
-            if 1 <= seleccion <= len(opciones):
-                servicios.append(opciones[seleccion - 1])
-            elif seleccion == len(opciones) + 1:
-                break
-            else:
-                print("Opción inválida.")
-        except Exception:
-            print("Entrada inválida o no disponible.")
-            break
-    return servicios
 
 def añadir_campus():
     try:
@@ -199,7 +198,7 @@ def borrar_dispositivo():
 
         print("\nDispositivos disponibles:")
         for idx, disp in enumerate(dispositivos):
-            nombre_linea = next((l for l in disp if l.strip().startswith("Router:") or l.strip().startswith("Switch") or l.strip().startswith("Switch Multicapa")), "")
+            nombre_linea = next((l for l in disp if l.strip().startswith("Router:") or l.strip().startswith("Switch")), "")
             print(f"{idx + 1}. {nombre_linea.strip()}")
 
         seleccion = int(input("Seleccione el número del dispositivo a eliminar: "))
@@ -214,6 +213,93 @@ def borrar_dispositivo():
 
     except Exception as e:
         print(f"Error al eliminar el dispositivo: {e}")
+
+def editar_dispositivo():
+    campus_seleccionado = elegir_campus()
+    if not campus_seleccionado:
+        return
+
+    filename = nombre_archivo_seguro(campus_seleccionado) + ".txt"
+    if not os.path.exists(filename):
+        print("No hay dispositivos registrados en este campus.")
+        return
+
+    try:
+        with open(filename, "r") as file:
+            lineas = file.readlines()
+
+        dispositivos = []
+        temp = []
+        for linea in lineas:
+            if linea.startswith("---------------------------------"):
+                if temp:
+                    dispositivos.append(temp)
+                    temp = []
+            temp.append(linea)
+        if temp:
+            dispositivos.append(temp)
+
+        print("\nDispositivos disponibles para editar:")
+        for idx, disp in enumerate(dispositivos):
+            nombre_linea = next((l for l in disp if ":" in l and not l.startswith("-")), "").strip()
+            print(f"{idx + 1}. {nombre_linea}")
+
+        seleccion = int(input("Seleccione el número del dispositivo a editar: "))
+        if not (1 <= seleccion <= len(dispositivos)):
+            print("Selección fuera de rango.")
+            return
+
+        dispositivo = dispositivos[seleccion - 1]
+
+        print("\n¿Qué desea editar?")
+        print("1. Dirección IP")
+        print("2. VLAN")
+        print("3. Nombre del dispositivo")
+        print("4. Jerarquía")
+        opcion = input("Seleccione opción: ").strip()
+
+        for i, linea in enumerate(dispositivo):
+            if opcion == "1" and linea.strip().startswith("IP:"):
+                nueva_ip = input("Nueva IP: ").strip()
+                if validar_ip(nueva_ip):
+                    dispositivo[i] = f"IP: {nueva_ip}\n"
+                    break
+                else:
+                    print("IP inválida.")
+                    return
+            elif opcion == "2" and linea.strip().startswith("VLAN:"):
+                nueva_vlan = input("Nueva VLAN: ").strip()
+                if validar_vlan(nueva_vlan):
+                    dispositivo[i] = f"VLAN: {nueva_vlan}\n"
+                    break
+                else:
+                    print("VLAN inválida.")
+                    return
+            elif opcion == "3" and ":" in linea and not linea.startswith("-"):
+                nuevo_nombre = input("Nuevo nombre del dispositivo: ").strip()
+                partes = linea.split(":")
+                dispositivo[i] = f"{partes[0]}: {nuevo_nombre}\n"
+                break
+            elif opcion == "4" and linea.strip().startswith("Jerarquía:"):
+                print("\nJerarquía:\n1. Núcleo\n2. Distribución\n3. Acceso")
+                nueva = input("Seleccione nueva jerarquía: ").strip()
+                jerarquias = {"1": "Núcleo", "2": "Distribución", "3": "Acceso"}
+                if nueva in jerarquias:
+                    dispositivo[i] = f"Jerarquía: {jerarquias[nueva]}\n"
+                else:
+                    print("Opción no válida.")
+                break
+
+        dispositivos[seleccion - 1] = dispositivo
+
+        with open(filename, "w") as file:
+            for d in dispositivos:
+                file.writelines(d)
+
+        print("Dispositivo actualizado correctamente.")
+
+    except Exception as e:
+        print(f"Error durante la edición: {e}")
 
 def main():
     print("Bienvenido al sistema de gestión de red.\n")
@@ -237,6 +323,8 @@ def main():
             borrar_dispositivo()
         elif opcion == "6":
             borrar_campus()
+        elif opcion == "7":
+            editar_dispositivo()
         elif opcion == "0":
             print("Saliendo del programa.")
             break
